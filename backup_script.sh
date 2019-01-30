@@ -1,0 +1,397 @@
+#!/bin/bash
+#
+# Скрипт для архивации базы данных и файлов сайта
+# с последующей отправкой на Яндекс.Диск
+#
+# Основан на аналогичном скрипте от Сергея Луконина
+# http://neblog.info/skript-bekapa-na-yandeks-disk/
+#
+# Версия: 1.1
+# Автор: Евгений Хованский <fajesu@ya.ru>
+# Copyright: (с) 2019 Digital Fresh
+# Сайт: https://www.d-fresh.ru/
+#
+# Обязательные ключи командной строки:
+# -project-name название проекта, используется в журналах событий
+#               в именах архивов
+# -db-user      пользователь базы данных (для режима db)
+# -db-pass      пароль пользователя базы данных (для режима db)
+# -project-dirs директории для архивации, через запятую (для режима files)
+#
+# Необязательные ключи командной строки:
+# -mode         выбор объекта архивации (режим):
+#                 - db (база данных)
+#                 - files (локальные файлы)
+#               (по-умолчанию "db,files", т.е. и БД, и файлы)
+#               (если указан только один объект, то обязательные
+#               ключи для другого становятся необязательными)
+# -db-host      сервер базы данных
+#               (по-умолчанию - localhost)
+# -db-name      название базы данных
+#               (по-умолчанию используются данные из
+#               ключа -db-user)
+# -max-backups  максимальное количество бекапов,
+#               хранимых на Яндекс.Диске
+#               (0 - хранить все бекапы)
+#               (по-умолчанию - 12)
+# ------------------------------------------------------------
+
+
+# --- Константы ---
+
+# Путь до скрипта
+# Используется в путях до архивов и файлов журналов событий
+declare -r script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Время запуска скрипта
+# Используется в именах архивов
+declare -r backup_time="$(date "+%Y%m%d-%H%M%S")"
+
+# Имя временного файла журнала событий
+declare -r log_tmp_file="$(basename -s .sh "${BASH_SOURCE[0]}")_tmp_log_${backup_time}_$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8).txt"
+
+
+# --- Стандартные значение переменных настроек ---
+# Настройки должны храниться в файле "_settings.sh" рядом с файлом скрипта
+ya_token=""
+log_file=""
+send_log_to=""
+send_log_from=""
+send_log_errors_only=true
+
+# Загружаем настройки
+. "$script_path/_settings.sh"
+
+# ------
+
+# Добавление даты в начало строки события
+function getLoggerString() {
+  echo "[$(date "+%Y-%m-%d %H:%M:%S")] $1"
+}
+
+# Запись события во временный файл журнала
+function logger() {
+  echo -e "$(getLoggerString "$1")" >> "$script_path/$log_tmp_file"
+  
+  if [ -n "$send_log_to" ] && [ "$2" = "error" ]; then
+    email_log_error=true
+  fi
+}
+
+# Подготовка переменных
+# Обработка ключей командной строки
+function prepareVars() {
+  if [ -z "$send_log_from" ]; then
+    send_log_from="$send_log_to"
+  fi
+
+  if [ -z "$send_log_errors_only" ]; then
+    send_log_errors_only=false
+  fi
+
+  if [ -z "$ya_token" ]; then
+    logger "Ошибка! Не задано значение переменной \"ya_token\" в настройках" "error"
+
+    return 1
+  fi
+
+  while [ -n "$1" ]; do
+    case "$1" in
+      -project-name)
+        project_name="$2"
+      ;;
+      -mode)
+        mode="$2"
+      ;;
+
+      -db-user)
+        mysql_user="$2"
+      ;;
+      -db-pass)
+        mysql_pass="$2"
+      ;;
+      -project-dirs)
+        backup_dirs="${2//\~/$HOME}"
+        backup_dirs="${backup_dirs//,/ }"
+      ;;
+
+      -db-host)
+        mysql_server="$2"
+      ;;
+      -db-name)
+        mysql_db="$2"
+      ;;
+      -max-backups)
+        max_backups="$2"
+      ;;
+    esac
+
+    shift # past argument
+    shift # past value
+  done
+
+
+  local -A vars=(
+    ["-project-name"]="$project_name"
+  )
+
+  local mode_tmp="$mode"
+  mode=""
+  if [[ $mode_tmp =~ "db" ]]; then
+    mode="db"
+  fi
+  if [[ $mode_tmp =~ "files" ]]; then
+    if [ -n "$mode" ]; then
+      mode="${mode},"
+    fi
+
+    mode="${mode}files"
+  fi
+  if [[ -z $mode ]]; then
+    mode="db,files"
+  fi
+
+  if [[ $mode =~ "db" ]]; then
+    vars["-db-user"]="$mysql_user"
+    vars["-db-pass"]="$mysql_pass"
+  fi
+  if [[ $mode =~ "files" ]]; then
+    vars["-project-dirs"]="$backup_dirs"
+  fi
+
+  local key
+  local error
+  for key in "${!vars[@]}"; do
+    if [ -z "${vars[$key]}" ]; then
+      error="Ошибка! Не указан ключ командной строки: $key"
+
+      if [ -n "$project_name" ]; then
+        error="$project_name - $error"
+      fi
+
+      logger "$error" "error"
+      logger "Обязательные ключи командной строки: ${!vars[*]}"
+
+      return 1
+    fi
+  done
+
+  if [ -z "$mysql_server" ]; then
+    mysql_server="localhost"
+  fi
+
+  if [ -z "$mysql_db" ]; then
+    mysql_db="$mysql_user"
+  fi
+
+  if [ -z "$max_backups" ]; then
+    max_backups="12"
+  fi
+
+  return 0
+}
+
+# Создание архивов базы данных и файлов
+function createLocalFiles() {
+  mkdir "$script_path/${project_name}_${backup_time}"
+
+  if [[ $mode =~ "db" ]]; then
+    logger "Создание архива базы данных: dump_mysql_${project_name}_${backup_time}.sql.gz"
+    local mysql_error="$(((mysqldump -h "$mysql_server" -u "$mysql_user" -p"$mysql_pass" --databases "$mysql_db" | gzip -9c | pv -qL 1M | split -b 2GB -d --additional-suffix=.sql.gz - "$script_path/${project_name}_${backup_time}/dump_mysql_${project_name}_${backup_time}_") 2>&1) | grep -v "Warning: Using a password")"
+    if [ -n "$mysql_error" ]; then
+      logger "$mysql_error" "error"
+
+      return 1
+    fi
+  fi
+
+  if [[ $mode =~ "files" ]]; then
+    logger "Создание архива каталогов: files_${project_name}_${backup_time}.tar.gz"
+    local files_error="$((tar -cP $backup_dirs | gzip -9c | pv -qL 1M | split -b 2GB -d --additional-suffix=.tar.gz - "$script_path/${project_name}_${backup_time}/files_${project_name}_${backup_time}_") 2>&1)"
+    if [ -n "$files_error" ]; then
+      logger "$files_error" "error"
+
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+# Удаление архивов
+function removeLocalFiles() {
+  logger "Удаление локальных архивов"
+  rm -fr "$script_path/${project_name}_${backup_time}"
+}
+
+# Получение значения по ключу из данных json
+# Использование: getByKeyFromJson "key" "json"
+function getByKeyFromJson() {
+  local regex="\"$1\":\"?([^\",\}]+)\"?"
+  local output
+  [[ $2 =~ $regex ]] && output="${BASH_REMATCH[1]}"
+  echo "$output"
+}
+
+# Проверка наличия ошибки в ответе Яндекса
+function checkError() {
+  echo "$(getByKeyFromJson "error" "$1")"
+}
+
+# Получение адреса для загрузки файла
+function getUploadUrl() {
+  local json_out="$(curl -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources/upload/?path=app:/$1&overwrite=true")"
+  local json_error="$(checkError "$json_out")"
+  if [ -n "$json_error" ]; then
+    logger "Ошибка получения адреса для загрузки файла $1: $json_error" "error"
+    echo ""
+  else
+    echo "$(getByKeyFromJson "href" "$json_out")"
+  fi
+}
+
+# Загрузка одного файла
+function uploadFile() {
+  local file_basename="$(basename "$1")"
+  local json_out
+  local json_error
+
+  logger "Загрузка файла $file_basename на Яндекс.Диск"
+
+  local upload_url="$(getUploadUrl "$project_name/$backup_time/$file_basename")"
+  if [ -n "$upload_url" ]; then
+    json_out="$(curl -s -T "$1" -H "Authorization: OAuth $ya_token" "$upload_url")"
+    json_error="$(checkError "$json_out")"
+    if [ -n "$json_error" ]; then
+      logger "Ошибка загрузки файла $file_basename: $json_error" "error"
+    fi
+  fi
+}
+
+# Загрузка архивов на Яндекс.Диск
+function upload() {
+  local json_out
+  local json_error
+
+  # Создание директорий на Яндекс.Диске
+  local path=""
+  local value
+  for value in "$project_name" "$backup_time"; do
+    path="$path$value/"
+
+    json_out="$(curl -X PUT -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources/?path=app:/$path")"
+    json_error="$(checkError "$json_out")"
+    if [ -n "$json_error" ] && [ "$json_error" != "DiskPathPointsToExistentDirectoryError" ]; then
+      logger "Ошибка создания директории $path в каталоге приложения на Яндекс.Диске: $json_error" "error"
+
+      return 1
+    fi
+  done
+
+  # Загрузка архивов
+  local file
+  for file in $script_path/${project_name}_${backup_time}/*; do
+    if [ -f "$file" ]; then
+      uploadFile "$file"
+    fi
+  done
+
+  return 0
+}
+
+# Получение списка директорий, вложенных в каталог проекта
+# https://tech.yandex.ru/disk/api/reference/meta-docpage/
+function yandexDirList() {
+  curl -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name&fields=_embedded.items.name&limit=999&sort=-created&offset=$max_backups" | tr "{},[]" "\n" | grep "name" | cut -d: -f 2 | tr -d "\""
+}
+
+# Удаление старых бекапов на Яндекс.Диске
+function removeCloudOldBackups() {
+  if [ "$max_backups" -gt 0 ]; then
+    local dirs=($(yandexDirList))
+    if [ "${#dirs[@]}" -gt 0 ]; then
+      logger "Удаление старых бекапов на Яндекс.Диске"
+
+      local dir
+      for dir in "${dirs[@]}"; do
+        curl -X DELETE -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name/$dir&force_async=true&permanently=true" >/dev/null
+      done
+    fi
+  fi
+}
+
+# Отправка письма с результатом выполнения скрипта
+function mailing() {
+  if [ -n "$send_log_to" ]; then
+    if [ "$send_log_errors_only" = false ] || ([ ! "$send_log_errors_only" = false ] && [ "$email_log_error" = true ]); then
+      local mail_error="$(mail -s "Site backup script log" -a "From: $send_log_from" -a "Content-type: text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")$(getLoggerString "$1")" 2>&1)"
+      if [ -n "$mail_error" ]; then
+        logger "Ошибка отправки почты! $mail_error"
+
+        return 1
+      fi
+    fi
+  fi
+}
+
+# Запись событий в общий файл журнала и удаление временного
+function writeLog() {
+  if [ -z "$log_file" ]; then
+    log_file="$(basename -s .sh "${BASH_SOURCE[0]}")_log.txt"
+  fi
+
+  cat "$script_path/$log_tmp_file" >> "$script_path/$log_file"
+  
+  rm -f "$script_path/$log_tmp_file"
+}
+
+# -----
+
+# Название проекта
+# Используется в журнале событий и в именах архивов
+declare project_name
+
+# Объект архивации: база данных, локальные файлы
+declare mode
+
+# Сервер базы данных
+declare mysql_server
+
+# Пользователь базы данных
+declare mysql_user
+
+# Пароль пользователя базы данных
+declare mysql_pass
+
+# Имя базы данных
+declare mysql_db
+
+# Директории для архивации (указываются через пробел),
+# которые будут помещены в единый архив и отправлены на Яндекс.Диск
+declare backup_dirs
+
+# Максимальное количество бекапов, хранимых на Яндекс.Диске
+declare max_backups
+
+# Результат выполнения скрипта содержит ошибки
+declare email_log_error=false
+
+# -----
+
+logger "--- Начало выполнения скрипта ---"
+prepareVars $*
+if [ $? -eq 0 ]; then
+  logger "Проект: $project_name"
+
+  createLocalFiles
+
+  if [ $? -eq 0 ]; then
+    upload
+  fi
+
+  removeLocalFiles
+  removeCloudOldBackups
+fi
+mailing "--- Завершение выполнения скрипта ---"
+logger "--- Завершение выполнения скрипта ---\n"
+writeLog

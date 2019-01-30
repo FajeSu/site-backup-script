@@ -1,0 +1,7 @@
+*~
+*.txt
+*.log
+*.sql.gz
+*.tar.gz
+
+/_settings.sh
