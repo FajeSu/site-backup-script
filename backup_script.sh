@@ -6,7 +6,7 @@
 # Основан на аналогичном скрипте от Сергея Луконина
 # http://neblog.info/skript-bekapa-na-yandeks-disk/
 #
-# Версия: 1.1
+# Версия: 1.2
 # Автор: Евгений Хованский <fajesu@ya.ru>
 # Copyright: (с) 2019 Digital Fresh
 # Сайт: https://www.d-fresh.ru/
@@ -50,6 +50,14 @@ declare -r backup_time="$(date "+%Y%m%d-%H%M%S")"
 # Имя временного файла журнала событий
 declare -r log_tmp_file="$(basename -s .sh "${BASH_SOURCE[0]}")_tmp_log_${backup_time}_$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8).txt"
 
+# Массив ответов сервера при загрузке файла на Яндекс.Диск
+declare -r -A upload_response_code_statuses=(
+  ["413"]="Размер файла превышает 10 ГБ"
+  ["500"]="Внутренняя ошибка сервера"
+  ["503"]="Сервер временно недоступен"
+  ["507"]="Недостаточно места"
+)
+
 
 # --- Стандартные значения переменных настроек ---
 # Настройки должны храниться в файле "_settings.sh" рядом с файлом скрипта
@@ -72,7 +80,7 @@ function getLoggerString() {
 # Запись события во временный файл журнала
 function logger() {
   echo -e "$(getLoggerString "$1")" >> "$script_path/$log_tmp_file"
-  
+
   if [ -n "$send_log_to" ] && [ "$2" = "error" ]; then
     email_log_error=true
   fi
@@ -240,7 +248,7 @@ function checkError() {
 
 # Получение адреса для загрузки файла
 function getUploadUrl() {
-  local json_out="$(curl -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources/upload/?path=app:/$1&overwrite=true")"
+  local json_out="$(curl -s -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" "https://cloud-api.yandex.net:443/v1/disk/resources/upload/?path=app:/$1&overwrite=true")"
   local json_error="$(checkError "$json_out")"
   if [ -n "$json_error" ]; then
     logger "Ошибка получения адреса для загрузки файла $1: $json_error" "error"
@@ -253,17 +261,16 @@ function getUploadUrl() {
 # Загрузка одного файла
 function uploadFile() {
   local file_basename="$(basename "$1")"
-  local json_out
-  local json_error
+  local response_code
 
   logger "Загрузка файла $file_basename на Яндекс.Диск"
 
   local upload_url="$(getUploadUrl "$project_name/$backup_time/$file_basename")"
   if [ -n "$upload_url" ]; then
-    json_out="$(curl -s -T "$1" -H "Authorization: OAuth $ya_token" "$upload_url")"
-    json_error="$(checkError "$json_out")"
-    if [ -n "$json_error" ]; then
-      logger "Ошибка загрузки файла $file_basename: $json_error" "error"
+    response_code="$(curl -s -T "$1" -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" -o /dev/null -w "%{http_code}" "$upload_url")"
+
+    if [ -n "$response_code" ] && [ -n "${upload_response_code_statuses[$response_code]}" ]; then
+      logger "Ошибка загрузки файла $file_basename: $response_code - ${upload_response_code_statuses[$response_code]}" "error"
     fi
   fi
 }
@@ -279,7 +286,7 @@ function upload() {
   for value in "$project_name" "$backup_time"; do
     path="$path$value/"
 
-    json_out="$(curl -X PUT -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources/?path=app:/$path")"
+    json_out="$(curl -X PUT -s -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" "https://cloud-api.yandex.net:443/v1/disk/resources/?path=app:/$path")"
     json_error="$(checkError "$json_out")"
     if [ -n "$json_error" ] && [ "$json_error" != "DiskPathPointsToExistentDirectoryError" ]; then
       logger "Ошибка создания директории $path в каталоге приложения на Яндекс.Диске: $json_error" "error"
@@ -302,7 +309,7 @@ function upload() {
 # Получение списка директорий, вложенных в каталог проекта
 # https://tech.yandex.ru/disk/api/reference/meta-docpage/
 function yandexDirList() {
-  curl -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name&fields=_embedded.items.name&limit=999&sort=-created&offset=$max_backups" | tr "{},[]" "\n" | grep "name" | cut -d: -f 2 | tr -d "\""
+  curl -s -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name&fields=_embedded.items.name&limit=999&sort=-created&offset=$max_backups" | tr "{},[]" "\n" | grep "name" | cut -d: -f 2 | tr -d "\""
 }
 
 # Удаление старых бекапов на Яндекс.Диске
@@ -342,7 +349,7 @@ function writeLog() {
   fi
 
   cat "$script_path/$log_tmp_file" >> "$script_path/$log_file"
-  
+
   rm -f "$script_path/$log_tmp_file"
 }
 
