@@ -51,7 +51,7 @@ declare -r backup_time="$(date "+%Y%m%d-%H%M%S")"
 declare -r log_tmp_file="$(basename -s .sh "${BASH_SOURCE[0]}")_tmp_log_${backup_time}_$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8).txt"
 
 
-# --- Стандартные значение переменных настроек ---
+# --- Стандартные значения переменных настроек ---
 # Настройки должны храниться в файле "_settings.sh" рядом с файлом скрипта
 ya_token=""
 log_file=""
