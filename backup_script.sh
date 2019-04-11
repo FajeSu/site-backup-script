@@ -205,7 +205,7 @@ function createLocalFiles() {
 
   if [[ $mode =~ "db" ]]; then
     logger "Создание архива базы данных: dump_mysql_${project_name}_${backup_time}.sql.gz"
-    local mysql_error="$(((mysqldump -h "$mysql_server" -u "$mysql_user" -p"$mysql_pass" --databases "$mysql_db" | gzip -9c | pv -qL 1M | split -b 2GB -d --additional-suffix=.sql.gz - "$script_path/${project_name}_${backup_time}/dump_mysql_${project_name}_${backup_time}_") 2>&1) | grep -v "Warning: Using a password")"
+    local mysql_error="$(((mysqldump -h "$mysql_server" -u "$mysql_user" -p"$mysql_pass" "$mysql_db" | gzip -9c | pv -qL 1M | split -b 2GB -d --additional-suffix=.sql.gz - "$script_path/${project_name}_${backup_time}/dump_mysql_${project_name}_${backup_time}_") 2>&1) | grep -v "Warning: Using a password")"
     if [ -n "$mysql_error" ]; then
       logger "$mysql_error" "error"
 
