@@ -6,7 +6,7 @@
 # Основан на аналогичном скрипте от Сергея Луконина
 # http://neblog.info/skript-bekapa-na-yandeks-disk/
 #
-# Версия: 1.2
+# Версия: 1.2.1
 # Автор: Евгений Хованский <fajesu@ya.ru>
 # Copyright: (с) 2019 Digital Fresh
 # Сайт: https://www.d-fresh.ru/
@@ -271,8 +271,12 @@ function uploadFile() {
 
     if [ -n "$response_code" ] && [ -n "${upload_response_code_statuses[$response_code]}" ]; then
       logger "Ошибка загрузки файла $file_basename: $response_code - ${upload_response_code_statuses[$response_code]}" "error"
+      
+      return 1
     fi
   fi
+  
+  return 0
 }
 
 # Загрузка архивов на Яндекс.Диск
@@ -300,6 +304,10 @@ function upload() {
   for file in $script_path/${project_name}_${backup_time}/*; do
     if [ -f "$file" ]; then
       uploadFile "$file"
+      
+      if [ $? -ne 0 ]; then
+        return 2
+      fi
     fi
   done
 
@@ -325,6 +333,13 @@ function removeCloudOldBackups() {
       done
     fi
   fi
+}
+
+# Удаление последнего бекапа на Яндекс.Диске после ошибки загрузки
+function removeCloudLastBackup() {
+  logger "Удаление последнего бекапа на Яндекс.Диске, загруженного с ошибкой"
+
+  curl -X DELETE -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name/$backup_time&force_async=true&permanently=true" >/dev/null
 }
 
 # Отправка письма с результатом выполнения скрипта
@@ -395,10 +410,26 @@ if [ $? -eq 0 ]; then
 
   if [ $? -eq 0 ]; then
     upload
+    
+    case $? in
+      # Ошибок нет
+      # Удаляем старые бекапы
+      0) 
+        removeCloudOldBackups
+      ;;
+      # Ошибка создания директории на Яндекс.Диске
+      # Ничего не делаем
+      1)
+      ;;
+      # Ошибка загрузки файла на Яндекс.Диск
+      # Удаляем последний загруженный бекап
+      2) 
+        removeCloudLastBackup
+      ;;
+    esac
   fi
 
   removeLocalFiles
-  removeCloudOldBackups
 fi
 mailing "--- Завершение выполнения скрипта ---"
 logger "--- Завершение выполнения скрипта ---\n"
