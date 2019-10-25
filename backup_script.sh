@@ -6,7 +6,7 @@
 # Основан на аналогичном скрипте от Сергея Луконина
 # http://neblog.info/skript-bekapa-na-yandeks-disk/
 #
-# Версия: 1.2.1
+# Версия: 1.2.2
 # Автор: Евгений Хованский <fajesu@ya.ru>
 # Copyright: (с) 2019 Digital Fresh
 # Сайт: https://www.d-fresh.ru/
@@ -346,7 +346,7 @@ function removeCloudLastBackup() {
 function mailing() {
   if [ -n "$send_log_to" ]; then
     if [ "$send_log_errors_only" = false ] || ([ ! "$send_log_errors_only" = false ] && [ "$email_log_error" = true ]); then
-      local mail_error="$(mail -s "Site backup script log" -a "From: $send_log_from" -a "Content-type: text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")
+      local mail_error="$(mail -s "Site backup script log" -r "$send_log_from" -S content-type="text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")
 $(getLoggerString "$1")" 2>&1)"
       if [ -n "$mail_error" ]; then
         logger "Ошибка отправки почты! $mail_error"
