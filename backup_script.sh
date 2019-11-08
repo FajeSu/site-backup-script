@@ -271,11 +271,11 @@ function uploadFile() {
 
     if [ -n "$response_code" ] && [ -n "${upload_response_code_statuses[$response_code]}" ]; then
       logger "Ошибка загрузки файла $file_basename: $response_code - ${upload_response_code_statuses[$response_code]}" "error"
-      
+
       return 1
     fi
   fi
-  
+
   return 0
 }
 
@@ -304,7 +304,7 @@ function upload() {
   for file in $script_path/${project_name}_${backup_time}/*; do
     if [ -f "$file" ]; then
       uploadFile "$file"
-      
+
       if [ $? -ne 0 ]; then
         return 2
       fi
@@ -346,8 +346,14 @@ function removeCloudLastBackup() {
 function mailing() {
   if [ -n "$send_log_to" ]; then
     if [ "$send_log_errors_only" = false ] || ([ ! "$send_log_errors_only" = false ] && [ "$email_log_error" = true ]); then
-      local mail_error="$(mail -s "Site backup script log" -r "$send_log_from" -S content-type="text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")
+      if [[ "$(mail -V)" =~ "mailutils" ]]; then
+        local mail_error="$(mail -s "Site backup script log" -a "From: $send_log_from" -a "Content-type: text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")
 $(getLoggerString "$1")" 2>&1)"
+      else
+        local mail_error="$(mail -s "Site backup script log" -r "$send_log_from" -S content-type="text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")
+$(getLoggerString "$1")" 2>&1)"
+      fi
+
       if [ -n "$mail_error" ]; then
         logger "Ошибка отправки почты! $mail_error"
 
@@ -402,6 +408,8 @@ declare email_log_error=false
 # -----
 
 logger "--- Начало выполнения скрипта ---"
+shopt -s nocasematch
+
 prepareVars $*
 if [ $? -eq 0 ]; then
   logger "Проект: $project_name"
@@ -410,7 +418,7 @@ if [ $? -eq 0 ]; then
 
   if [ $? -eq 0 ]; then
     upload
-    
+
     case $? in
       # Ошибок нет
       # Удаляем старые бекапы
@@ -431,6 +439,8 @@ if [ $? -eq 0 ]; then
 
   removeLocalFiles
 fi
+shopt -u nocasematch
+
 mailing "--- Завершение выполнения скрипта ---"
 logger "--- Завершение выполнения скрипта ---\n"
 writeLog
