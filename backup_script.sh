@@ -226,12 +226,6 @@ function createLocalFiles() {
   return 0
 }
 
-# Удаление архивов
-function removeLocalFiles() {
-  logger "Удаление локальных архивов"
-  rm -fr "$script_path/${project_name}_${backup_time}"
-}
-
 # Получение значения по ключу из данных json
 # Использование: getByKeyFromJson "key" "json"
 function getByKeyFromJson() {
@@ -279,6 +273,12 @@ function uploadFile() {
   return 0
 }
 
+# Удаление локального файла
+function removeLocalFile() {
+  logger "Удаление локального файла $(basename "$1")"
+  rm -f "$1"
+}
+
 # Загрузка архивов на Яндекс.Диск
 function upload() {
   local json_out
@@ -308,6 +308,9 @@ function upload() {
       if [ $? -ne 0 ]; then
         return 2
       fi
+
+      # Удаление архива после успешной загрузки
+      removeLocalFile "$file"
     fi
   done
 
@@ -361,6 +364,12 @@ $(getLoggerString "$1")" 2>&1)"
       fi
     fi
   fi
+}
+
+# Удаление локальных архивов
+function removeLocalFiles() {
+  logger "Удаление локальных архивов"
+  rm -fr "$script_path/${project_name}_${backup_time}"
 }
 
 # Запись событий в общий файл журнала и удаление временного
@@ -422,7 +431,7 @@ if [ $? -eq 0 ]; then
     case $? in
       # Ошибок нет
       # Удаляем старые бекапы
-      0) 
+      0)
         removeCloudOldBackups
       ;;
       # Ошибка создания директории на Яндекс.Диске
@@ -431,7 +440,7 @@ if [ $? -eq 0 ]; then
       ;;
       # Ошибка загрузки файла на Яндекс.Диск
       # Удаляем последний загруженный бекап
-      2) 
+      2)
         removeCloudLastBackup
       ;;
     esac
