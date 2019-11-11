@@ -30,9 +30,9 @@
 # -db-name      название базы данных
 #               (по-умолчанию используются данные из
 #               ключа -db-user)
-# -max-backups  максимальное количество бекапов,
+# -max-backups  максимальное количество бэкапов,
 #               хранимых на Яндекс.Диске
-#               (0 - хранить все бекапы)
+#               (0 - хранить все бэкапы)
 #               (по-умолчанию - 12)
 # ------------------------------------------------------------
 
@@ -323,12 +323,12 @@ function yandexDirList() {
   curl -s -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name&fields=_embedded.items.name&limit=999&sort=-created&offset=$max_backups" | tr "{},[]" "\n" | grep "name" | cut -d: -f 2 | tr -d "\""
 }
 
-# Удаление старых бекапов на Яндекс.Диске
+# Удаление старых бэкапов на Яндекс.Диске
 function removeCloudOldBackups() {
   if [ "$max_backups" -gt 0 ]; then
     local dirs=($(yandexDirList))
     if [ "${#dirs[@]}" -gt 0 ]; then
-      logger "Удаление старых бекапов на Яндекс.Диске"
+      logger "Удаление старых бэкапов на Яндекс.Диске"
 
       local dir
       for dir in "${dirs[@]}"; do
@@ -338,9 +338,9 @@ function removeCloudOldBackups() {
   fi
 }
 
-# Удаление последнего бекапа на Яндекс.Диске после ошибки загрузки
+# Удаление последнего бэкапа на Яндекс.Диске после ошибки загрузки
 function removeCloudLastBackup() {
-  logger "Удаление последнего бекапа на Яндекс.Диске, загруженного с ошибкой"
+  logger "Удаление последнего бэкапа на Яндекс.Диске, загруженного с ошибкой"
 
   curl -X DELETE -s -H "Authorization: OAuth $ya_token" "https://cloud-api.yandex.net:443/v1/disk/resources?path=app:/$project_name/$backup_time&force_async=true&permanently=true" >/dev/null
 }
@@ -408,7 +408,7 @@ declare mysql_db
 # которые будут помещены в единый архив и отправлены на Яндекс.Диск
 declare backup_dirs
 
-# Максимальное количество бекапов, хранимых на Яндекс.Диске
+# Максимальное количество бэкапов, хранимых на Яндекс.Диске
 declare max_backups
 
 # Результат выполнения скрипта содержит ошибки
@@ -430,7 +430,7 @@ if [ $? -eq 0 ]; then
 
     case $? in
       # Ошибок нет
-      # Удаляем старые бекапы
+      # Удаляем старые бэкапы
       0)
         removeCloudOldBackups
       ;;
@@ -439,7 +439,7 @@ if [ $? -eq 0 ]; then
       1)
       ;;
       # Ошибка загрузки файла на Яндекс.Диск
-      # Удаляем последний загруженный бекап
+      # Удаляем последний загруженный бэкап
       2)
         removeCloudLastBackup
       ;;
