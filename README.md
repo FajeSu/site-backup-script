@@ -2,9 +2,17 @@
 Скрипт для архивации базы данных и файлов сайта с последующей отправкой на Яндекс.Диск. Основан на аналогичном [скрипте от Сергея Луконина](http://neblog.info/skript-bekapa-na-yandeks-disk/).
 
 ### Установка и настройка
-1) Зарегистрировать приложение и получить токен в [Яндекс.OAuth](https://tech.yandex.ru/oauth/doc/dg/concepts/about-docpage)
+1. [Зарегистрировать приложение](https://yandex.ru/dev/oauth/doc/dg/tasks/register-client-docpage/) в Яндекс.OAuth для аккаунта, Яндекс.Диск которого будет использоваться для хранения бэкапов
 
-2) Загрузить скрипт на хостинг и в настройках использовать полученный токен:
+    1.1. **Платформы**. Выбрать "_Веб-сервисы_", ниже нажать на ссылку "_Подставить URL для разработки_"
+
+    1.2. **Доступы**. В группе "_Яндекс.Диск REST API_" поставить 2 галочки:
+      * Доступ к информации о Диске
+      * Доступ к папке приложения на Диске
+
+2. [Получить токен](https://yandex.ru/dev/oauth/doc/dg/tasks/get-oauth-token-docpage/) вручную
+
+3. Загрузить скрипт на свой сервер и в настройках использовать полученный токен:
 ```
 git clone https://github.com/FajeSu/site-backup-script.git ~/site-backup-script/
 cd ~/site-backup-script/
@@ -42,12 +50,12 @@ vim _settings.sh
 <li><strong>db</strong> (база данных)</li>
 <li><strong>files</strong> (локальные файлы)</li>
 </ul>
-По-умолчанию "db,files", т.е. и БД, и файлы. Если указан только один объект, то обязательные ключи для другого становятся необязательными
+По-умолчанию "<i>db,files</i>", т.е. и БД, и файлы. Если указан только один объект, то обязательные ключи для другого становятся необязательными
 </td>
 </tr>
 <tr>
 <td align="left" valign="top"><code>-db-host</code></td>
-<td align="left" valign="top">Сервер базы данных (по-умолчанию - localhost)</td>
+<td align="left" valign="top">Сервер базы данных (по-умолчанию - <i>localhost</i>)</td>
 </tr>
 <tr>
 <td align="left" valign="top"><code>-db-name</code></td>
@@ -61,7 +69,7 @@ vim _settings.sh
 
 ### Примеры
 ```
-# Архивирование БД и файлов сайта. Максимальное кол-во хранимых бэкапов = 8.
+# Архивирование БД и файлов сайта. Максимальное кол-во хранимых бэкапов - 8
 /bin/bash ~/site-backup-script/backup_script.sh -project-name site-domain.com -db-user username -db-pass password -project-dirs ~/site-domain.com/public_html/ -max-backups 8
 
 # Архивирование только БД
@@ -71,9 +79,9 @@ vim _settings.sh
 /bin/bash ~/site-backup-script/backup_script.sh -project-name site-domain.com -mode files -project-dirs ~/site-domain.com/public_html/
 
 # Архивирование отдельных файлов или директорий
-/bin/bash ~/site-backup-script/backup_script.sh -project-name site-domain.com -mode files -project-dirs ~/site-domain.com/public_html/.htaccess,~/site-domain.com/public_html/robots.txt,~/site-domain.com/public_html/tmp/
+/bin/bash ~/site-backup-script/backup_script.sh -project-name site-domain.com -mode files -project-dirs ~/site-domain.com/public_html/index.html,~/site-domain.com/public_html/tmp/
 
-# Архивирование БД с другого сервера. Для этого на стороне сервера необходимо дать доступ на подключение с определенного IP.
+# Архивирование БД с другого сервера. На стороне того сервера необходимо дать доступ на подключение с определенного IP
 /bin/bash ~/site-backup-script/backup_script.sh -project-name another-site.org -mode db -db-host another-site.org -db-name another_db -db-user another_user -db-pass another_password
 ```
 
@@ -86,15 +94,18 @@ vim _settings.sh
       └ <backup-time>
         └ файлы архивов
 ```
+где
 <table>
 <tr>
-<td align="left" valign="top" width="60px" rowspan="3">где</td>
-<td align="left" valign="top"><code>&lt;app-name&gt;</code> - название приложения, указанное не этапе регистрации;</td>
+<td align="left" valign="top" width="150px"><code>&lt;app-name&gt;</code></td>
+<td align="left" valign="top">Название приложения, указанное не этапе его регистрации</td>
 </tr>
 <tr>
-<td><code>&lt;project-name&gt;</code> - название проекта;</td>
+<td align="left" valign="top"><code>&lt;project-name&gt;</code></td>
+<td>Название проекта</td>
 </tr>
 <tr>
-<td><code>&lt;backup-time&gt;</code> - дата и время запуска скрипта на сервере, вида 20191231-235959</td>
+<td align="left" valign="top"><code>&lt;backup-time&gt;</code></td>
+<td>Дата и время запуска скрипта на сервере, вида 20191231-235959</td>
 </tr>
 </table>
