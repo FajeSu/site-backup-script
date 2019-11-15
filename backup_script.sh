@@ -240,6 +240,36 @@ function checkError() {
   echo "$(getByKeyFromJson "error" "$1")"
 }
 
+# Получение понятного для восприятия размера файла
+function getHumanReadableFileSize() {
+  local file_size="$(du -b $1 2>&1)"
+
+  if [[ $file_size =~ ^"du: " ]]; then
+    logger "$file_size" "error"
+    echo ""
+  else
+    $file_size="$(echo $file_size | awk '
+      function convertFileSize(bytes) {
+        size_name[1024^4]="ТиБ";
+        size_name[1024^3]="ГиБ";
+        size_name[1024^2]="МиБ";
+        size_name[1024]="КиБ";
+
+        for (x = 1024^4; x >= 1024; x /= 1024) {
+          if (bytes >= x) {
+            return sprintf("%.2f %s", bytes/x, size_name[x]);
+          }
+        }
+
+        return sprintf("%d Б", bytes);
+      }
+      {print convertFileSize($1)}
+    ' 2>/dev/null)"
+
+    echo "$file_size"
+  fi
+}
+
 # Получение адреса для загрузки файла
 function getUploadUrl() {
   local json_out="$(curl -s -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" "https://cloud-api.yandex.net:443/v1/disk/resources/upload/?path=app:/$1&overwrite=true")"
@@ -255,13 +285,17 @@ function getUploadUrl() {
 # Загрузка одного файла
 function uploadFile() {
   local file_basename="$(basename "$1")"
-  local response_code
+  local file_size="$(getHumanReadableFileSize "$1")"
 
-  logger "Загрузка файла $file_basename на Яндекс.Диск"
+  if [ -n "$file_size" ]; then
+    $file_size=" ($file_size)"
+  fi
+
+  logger "Загрузка файла ${file_basename}${file_size} на Яндекс.Диск"
 
   local upload_url="$(getUploadUrl "$project_name/$backup_time/$file_basename")"
   if [ -n "$upload_url" ]; then
-    response_code="$(curl -s -T "$1" -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" -o /dev/null -w "%{http_code}" "$upload_url")"
+    local response_code="$(curl -s -T "$1" -H "Authorization: OAuth $ya_token" -H "Accept: application/json" -H "Content-Type: application/json" -o /dev/null -w "%{http_code}" "$upload_url")"
 
     if [ -n "$response_code" ] && [ -n "${upload_response_code_statuses[$response_code]}" ]; then
       logger "Ошибка загрузки файла $file_basename: $response_code - ${upload_response_code_statuses[$response_code]}" "error"
