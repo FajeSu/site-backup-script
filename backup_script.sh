@@ -248,7 +248,7 @@ function getHumanReadableFileSize() {
     logger "$file_size" "error"
     echo ""
   else
-    $file_size="$(echo $file_size | awk '
+    file_size="$(echo $file_size | awk '
       function convertFileSize(bytes) {
         size_name[1024^4]="ТиБ";
         size_name[1024^3]="ГиБ";
