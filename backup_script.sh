@@ -288,7 +288,7 @@ function uploadFile() {
   local file_size="$(getHumanReadableFileSize "$1")"
 
   if [ -n "$file_size" ]; then
-    $file_size=" ($file_size)"
+    file_size=" ($file_size)"
   fi
 
   logger "Загрузка файла ${file_basename}${file_size} на Яндекс.Диск"
