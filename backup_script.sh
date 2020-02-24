@@ -6,9 +6,9 @@
 # Основан на аналогичном скрипте от Сергея Луконина
 # http://neblog.info/skript-bekapa-na-yandeks-disk/
 #
-# Версия: 1.2.2
+# Версия: 1.2.3
 # Автор: Евгений Хованский <fajesu@ya.ru>
-# Copyright: (с) 2019 Digital Fresh
+# Copyright: (с) 2020 Digital Fresh
 # Сайт: https://www.d-fresh.ru/
 #
 # Обязательные ключи командной строки:
@@ -242,31 +242,40 @@ function checkError() {
 
 # Получение понятного для восприятия размера файла
 function getHumanReadableFileSize() {
-  local file_size="$(du -b $1 2>&1)"
+  local regex="^[0-9]+$"
+  local file_size="$(du -b $1 2>&1 | cut -f 1)"
 
-  if [[ $file_size =~ ^"du: " ]]; then
-    logger "$file_size" "error"
-    echo ""
-  else
-    file_size="$(echo $file_size | awk '
-      function convertFileSize(bytes) {
-        size_name[1024^4]="ТиБ";
-        size_name[1024^3]="ГиБ";
-        size_name[1024^2]="МиБ";
-        size_name[1024]="КиБ";
+  if [[ $file_size =~ $regex ]]; then
+    local bc_error="$(bc --version 2>&1 1>/dev/null)"
 
-        for (x = 1024^4; x >= 1024; x /= 1024) {
-          if (bytes >= x) {
-            return sprintf("%.2f %s", bytes/x, size_name[x]);
-          }
-        }
+    if [ $file_size -lt 1024 ] || [ -n "$bc_error" ]; then
+      file_size="$file_size Б"
 
-        return sprintf("%d Б", bytes);
-      }
-      {print convertFileSize($1)}
-    ' 2>/dev/null)"
+      if [ -n "$bc_error" ]; then
+        logger "Внимание! Команда \"bc\" не найдена" "error"
+      fi
+    else
+      local -A sizes_names=(
+        [1024**4]="ТиБ"
+        [1024**3]="ГиБ"
+        [1024**2]="МиБ"
+        [1024]="КиБ"
+      )
+      local size
+
+      for ((size=1024**4; size>=1024; size/=1024)); do
+        if [ $file_size -ge $size ]; then
+          file_size="$(bc <<< "scale=2;$file_size/$size" 2>/dev/null) ${sizes_names[$size]}"
+
+          break
+        fi
+      done
+    fi
 
     echo "$file_size"
+  else
+    logger "$file_size" "error"
+    echo ""
   fi
 }
 
@@ -383,7 +392,7 @@ function removeCloudLastBackup() {
 function mailing() {
   if [ -n "$send_log_to" ]; then
     if [ "$send_log_errors_only" = false ] || ([ ! "$send_log_errors_only" = false ] && [ "$email_log_error" = true ]); then
-      if [[ "$(mail -V)" =~ "mailutils" ]]; then
+      if [[ "$(mail -V 2>/dev/null)" =~ "mailutils" ]]; then
         local mail_error="$(mail -s "Site backup script log" -a "From: $send_log_from" -a "Content-type: text/plain; charset=utf-8" "$send_log_to" <<<"$(cat "$script_path/$log_tmp_file")
 $(getLoggerString "$1")" 2>&1)"
       else
