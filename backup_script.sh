@@ -256,9 +256,9 @@ function getHumanReadableFileSize() {
       fi
     else
       local -A sizes_names=(
-        [1024**4]="ТиБ"
-        [1024**3]="ГиБ"
-        [1024**2]="МиБ"
+        [$[1024**4]]="ТиБ"
+        [$[1024**3]]="ГиБ"
+        [$[1024**2]]="МиБ"
         [1024]="КиБ"
       )
       local size
