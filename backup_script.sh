@@ -459,8 +459,8 @@ declare email_log_error=false
 
 # -----
 
-logger "--- Начало выполнения скрипта ---"
 shopt -s nocasematch
+logger "--- Начало выполнения скрипта ---"
 
 prepareVars $*
 if [ $? -eq 0 ]; then
@@ -491,8 +491,8 @@ if [ $? -eq 0 ]; then
 
   removeLocalFiles
 fi
-shopt -u nocasematch
 
 mailing "--- Завершение выполнения скрипта ---"
 logger "--- Завершение выполнения скрипта ---\n"
 writeLog
+shopt -u nocasematch
