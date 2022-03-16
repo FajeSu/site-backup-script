@@ -6,9 +6,9 @@
 # Основан на аналогичном скрипте от Сергея Луконина
 # http://neblog.info/skript-bekapa-na-yandeks-disk/
 #
-# Версия: 1.2.3
+# Версия: 1.2.4
 # Автор: Евгений Хованский <fajesu@ya.ru>
-# Copyright: (с) 2020 Digital Fresh
+# Copyright: (с) 2022 Digital Fresh
 # Сайт: https://www.d-fresh.ru/
 #
 # Обязательные ключи командной строки:
@@ -34,6 +34,10 @@
 #               хранимых на Яндекс.Диске
 #               (0 - хранить все бэкапы)
 #               (по-умолчанию - 12)
+# -no-remove-local
+#               не удалять локальные архивы
+# -no-upload    не загружать бэкап на Яндекс.Диск
+#               (при этом включается ключ -no-remove-local)
 # ------------------------------------------------------------
 
 
@@ -107,35 +111,50 @@ function prepareVars() {
     case "$1" in
       -project-name)
         project_name="$2"
+        shift
       ;;
       -mode)
         mode="$2"
+        shift
       ;;
 
       -db-user)
         mysql_user="$2"
+        shift
       ;;
       -db-pass)
         mysql_pass="$2"
+        shift
       ;;
       -project-dirs)
         backup_dirs="${2//\~/$HOME}"
         backup_dirs="${backup_dirs//,/ }"
+        shift
       ;;
 
       -db-host)
         mysql_server="$2"
+        shift
       ;;
       -db-name)
         mysql_db="$2"
+        shift
       ;;
       -max-backups)
         max_backups="$2"
+        shift
+      ;;
+
+      -no-remove-local)
+        no_remove_local=true
+      ;;
+      -no-upload)
+        no_remove_local=true
+        no_upload=true
       ;;
     esac
 
-    shift # past argument
-    shift # past value
+    shift
   done
 
 
@@ -353,7 +372,9 @@ function upload() {
       fi
 
       # Удаление архива после успешной загрузки
-      removeLocalFile "$file"
+      if [ "$no_remove_local" = false ]; then
+        removeLocalFile "$file"
+      fi
     fi
   done
 
@@ -457,6 +478,12 @@ declare max_backups
 # Результат выполнения скрипта содержит ошибки
 declare email_log_error=false
 
+# Ключ проверки необходимости не удалять локальные архивы
+declare no_remove_local=false
+
+# Ключ проверки необходимости не загружать бэкап на Яндекс.Диск
+declare no_upload=false
+
 # -----
 
 shopt -s nocasematch
@@ -468,7 +495,7 @@ if [ $? -eq 0 ]; then
 
   createLocalFiles
 
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 0 ] && [ "$no_upload" = false ]; then
     upload
 
     case $? in
@@ -489,7 +516,9 @@ if [ $? -eq 0 ]; then
     esac
   fi
 
-  removeLocalFiles
+  if [ "$no_remove_local" = false ]; then
+    removeLocalFiles
+  fi
 fi
 
 mailing "--- Завершение выполнения скрипта ---"

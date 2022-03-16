@@ -33,7 +33,7 @@ vim _settings.sh
 * **Обязательные ключи командной строки:**
 <table>
 <tr>
-<td align="left" valign="top" width="150px"><code>-project-name</code></td>
+<td align="left" valign="top" width="165px"><code>-project-name</code></td>
 <td align="left" valign="top">Название проекта, используется в журналах событий и именах архивов</td>
 </tr>
 <tr>
@@ -53,7 +53,7 @@ vim _settings.sh
 * **Необязательные ключи командной строки:**
 <table>
 <tr>
-<td align="left" valign="top" width="150px"><code>-mode</code></td>
+<td align="left" valign="top" width="165px"><code>-mode</code></td>
 <td align="left" valign="top">Выбор объекта архивации (<strong>режим</strong>):<br />
 <ul>
 <li><strong>db</strong> (база данных)</li>
@@ -73,6 +73,14 @@ vim _settings.sh
 <tr>
 <td align="left" valign="top"><code>-max-backups</code></td>
 <td align="left" valign="top">Максимальное количество бэкапов, хранимых на Яндекс.Диске (0 - хранить все бэкапы, по-умолчанию - 12)</td>
+</tr>
+<tr>
+<td align="left" valign="top"><code>-no-remove-local</code></td>
+<td align="left" valign="top">Не удалять локальные архивы</td>
+</tr>
+<tr>
+<td align="left" valign="top"><code>-no-upload</code></td>
+<td align="left" valign="top">Не загружать бэкап на Яндекс.Диск (при этом включается ключ <code>-no-remove-local</code>)</td>
 </tr>
 </table>
 
@@ -106,7 +114,7 @@ vim _settings.sh
 где
 <table>
 <tr>
-<td align="left" valign="top" width="150px"><code>&lt;app-name&gt;</code></td>
+<td align="left" valign="top" width="165px"><code>&lt;app-name&gt;</code></td>
 <td align="left" valign="top">Название приложения, указанное не этапе его регистрации</td>
 </tr>
 <tr>
